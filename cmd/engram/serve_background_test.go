@@ -21,6 +21,12 @@ func init() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
+	if envMarker := os.Getenv("ENGRAM_BACKGROUND_TEST_ENV_MARKER"); envMarker != "" {
+		if err := os.WriteFile(envMarker, []byte(os.Getenv("ENGRAM_CLOUD_AUTOSYNC")), 0600); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+	}
 	fmt.Fprintln(os.Stderr, "background child stderr marker")
 	time.Sleep(8 * time.Second)
 	os.Exit(0)
@@ -80,6 +86,40 @@ func TestServeBackground(t *testing.T) {
 		if err != nil || !strings.Contains(string(data), "background child stderr marker") {
 			t.Fatalf("stderr log=%q err=%v", data, err)
 		}
+	})
+	t.Run("extra environment reaches the child", func(t *testing.T) {
+		dir := t.TempDir()
+		envMarker := filepath.Join(dir, "child.env")
+		executable, err := os.Executable()
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("ENGRAM_BACKGROUND_TEST_CHILD", "1")
+		t.Setenv("ENGRAM_BACKGROUND_TEST_MARKER", filepath.Join(dir, "child.pid"))
+		t.Setenv("ENGRAM_BACKGROUND_TEST_ENV_MARKER", envMarker)
+		t.Setenv("ENGRAM_CLOUD_AUTOSYNC", "")
+		if err := launchServeBackground(executable, filepath.Join(dir, "serve.err.log"), "ENGRAM_CLOUD_AUTOSYNC=1"); err != nil {
+			t.Fatal(err)
+		}
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			if data, err := os.ReadFile(envMarker); err == nil && len(data) > 0 {
+				if string(data) != "1" {
+					t.Fatalf("ENGRAM_CLOUD_AUTOSYNC = %q, want 1", data)
+				}
+				if pid, err := os.ReadFile(filepath.Join(dir, "child.pid")); err == nil {
+					if n, err := strconv.Atoi(string(pid)); err == nil {
+						if process, err := os.FindProcess(n); err == nil {
+							_ = process.Kill()
+							_, _ = process.Wait()
+						}
+					}
+				}
+				return
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		t.Fatal("child did not record its environment")
 	})
 	t.Run("bad log path", func(t *testing.T) {
 		if err := launchServeBackground("unused.exe", filepath.Join(t.TempDir(), "missing", "log")); err == nil {

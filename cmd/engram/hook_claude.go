@@ -164,6 +164,11 @@ func confirmHookSession(id, cwd string, projectOwned bool) (effective string, co
 	// lookup that fails outright denies the write: a degraded answer is not a
 	// first registration.
 	session, known, lookupErr := hookSessionOwnerProject(ctx, client, base, id)
+	// The one exception is a managed local server nobody is listening for:
+	// restart it and look up once more (#1956).
+	if lookupErr != nil && recoverManagedLocalServer(ctx, client, base) {
+		session, known, lookupErr = hookSessionOwnerProject(ctx, client, base, id)
+	}
 	if lookupErr != nil {
 		return "", lookupErr
 	}

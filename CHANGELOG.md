@@ -33,6 +33,7 @@ Breaking changes are always marked with a `type:breaking-change` label and docum
 
 ### Memory core
 
+- **fix(claude):** restart the managed local server from the PreToolUse write gate on Windows (#1956). Claude Desktop ends the job objects that hold its processes, which also killed an `engram serve` its SessionStart had launched, and every session's writes were then denied with `host session lookup failed` until the next SessionStart. When the default local endpoint refuses the connection, the gate now starts the server detached, waits for this data directory's `instance_id`, and retries the lookup once within the existing confirmation budget. Explicit endpoints, reachable failing servers and foreign instances still deny.
 - **fix(claude):** bind the PreToolUse write gate to the session's registered owner project instead of re-deriving it from the hook cwd (#1717). Writes from a registered session now succeed wherever the shell is — subfolders, sibling or cloned repositories, removed worktrees, and ambiguous directories no longer deny the gate. The cwd names the project only on first registration. Denials now name their actual cause (`already ended`, `session_project_conflict` with owner and requested projects, project-resolution failures with the server's reason) instead of the single generic "registration could not be confirmed" message shared with #1624.
 
 - **feat(mcp):** add an optional validated `project` argument to `mem_get_observation` for response context. Observation lookup remains ID-based and is not filtered by project ownership.
